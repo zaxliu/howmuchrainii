@@ -1,0 +1,9 @@
+# no raw data file (.dat)
+./data
+*.dat
+
+# Pycharm files
+.idea/
+
+# ipython notebook checkpoints
+.ipynb_checkpoints/
