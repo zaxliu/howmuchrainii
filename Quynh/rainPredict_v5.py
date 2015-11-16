@@ -1,4 +1,3 @@
-
 import numpy as np
 import time
 import xgboost as xgb
@@ -14,14 +13,16 @@ def MAE(predicted,actual):
 def get_training_data(training_path):
     trn_all = pd.read_csv(training_path)
     index=list(trn_all)
-    my_indices = [0,1,2,3,5,6,7,9,10,15,17, 18, 23]
+    #my_indices = [0,1,2,3,5,6,7,9,10,15,17, 18, 23]
+    #my_indices = [0,1,2,3,7,11,15,19,23]
+    my_indices = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
     trn_new = trn_all[[index[i] for i in my_indices]]
     trn_new = trn_new[trn_new['Expected']<69]
 
     #combine observations with same ID by using mean
-    trn_mean = trn_new.groupby(trn_new.Id).agg(['mean', 'median', 'std', 'count'])
+    trn_mean = trn_new.groupby(trn_new.Id).agg(['mean', 'median', 'std', 'count','min','max'])
     trn_mean.columns = ['_'.join(col).strip() for col in trn_mean.columns.values]
-
+    print(trn_mean)
     # ignore id's where all Ref vales are NaN
     trn_mean = trn_mean[pd.notnull(trn_mean.Ref_mean)]
 
@@ -32,31 +33,31 @@ def get_training_data(training_path):
 
     #train and test data preparation
     y_trn = np.log1p(trn_mean.loc[:,'Expected_mean'].values)
-    X_trn = trn_mean.loc[:,'minutes_past_mean':'Zdr_5x5_90th_count'].values
+    #X_trn = trn_mean.loc[:,'minutes_past_mean':'Zdr_5x5_90th_count'].values
+    #X_trn = trn_mean.loc[:,'minutes_past_mean':'Kdp_count'].values
+    X_trn = trn_mean.loc[:,'minutes_past_mean':'Kdp_5x5_90th_max'].values
+
+    #print(X_trn)
 
     return X_trn, y_trn
 
 def get_testing_data(testing_path):
     test_all = pd.read_csv(testing_path)
     index=list(test_all)
-    my_indices = [0,1,2,3,5,6,7,9,10,15,17, 18]
+    # my_indices = [0,1,2,3,5,6,7,9,10,15,17, 18]
+    #my_indices = [0,1,2,3,7,11,15,19]
+    my_indices = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]
     test_new = test_all[[index[i] for i in my_indices]]
-    #Cut off Ref values < 0
-    #test_new[test_new['Ref_5x5_50th']<0] = np.nan
-    #test_new[test_new['Ref_5x5_90th']<0] = np.nan
-    #test_new[test_new['RefComposite']<0] = np.nan
-    #test_new[test_new['RefComposite_5x5_50th']<0] = np.nan
-    #test_new[test_new['RefComposite_5x5_90th']<0] = np.nan
-    #test_new[test_new['Ref']<0] = np.nan
-    test_mean = test_new.groupby(test_new.Id).agg(['mean', 'median', 'std', 'count'])
+    test_mean = test_new.groupby(test_new.Id).agg(['mean', 'median', 'std', 'count','min','max'])
     test_mean.columns = ['_'.join(col).strip() for col in test_mean.columns.values]
 
     # Imputing with mean values
     index2 = list(test_mean)
     imp = Imputer(missing_values='NaN', strategy='mean', axis=0)
     test_mean= pd.DataFrame(imp.fit_transform(test_mean),index=test_mean.index,columns=index2)
-    test_X = test_mean.loc[:,'minutes_past_mean':'Zdr_5x5_90th_count'].values
-
+    #test_X = test_mean.loc[:,'minutes_past_mean':'Zdr_5x5_90th_count'].values
+    #test_X = test_mean.loc[:,'minutes_past_mean':'Kdp_count'].values
+    test_X = test_mean.loc[:,'minutes_past_mean':'Kdp_5x5_90th_max'].values
     unique_ID = pd.unique(test_all['Id'])
 
     return test_X,test_mean,unique_ID
@@ -98,7 +99,8 @@ def xgb_cv(X_trn, y_trn, objective, num_folds, num_threads, num_round, eta, max_
         print(time.time()-t)
 
         xgmat_test = xgb.DMatrix(xgb_test_cv)
-        y_predict = bst.predict(xgmat_test)
+        tmp_predict = bst.predict(xgmat_test)
+        y_predict = np.exp(tmp_predict)-1
         accu = MAE(y_predict,y_test_cv)
 
         if accu <= best_cv:
@@ -120,21 +122,6 @@ def export_submission(unique_ID,prediction,processed_test,out_file):
     test_result = pd.merge(test_result, test_result_exist, how='left', on=['Id'], sort=True)
     test_result.loc[test_result['Expected'].isnull(), 'Expected'] = marshall.loc[test_result['Expected'].isnull(), 'Expected']
     test_result.loc[test_result['Expected'].notnull(), 'Expected'] = 0.75*test_result.loc[test_result['Expected'].notnull(), 'Expected']+0.25*marshall.loc[test_result['Expected'].notnull(), 'Expected']
-
-    test_result.to_csv(out_file, index=False)
-
-def export_submission_woPalmer(unique_ID,prediction,processed_test,out_file):
-
-    marshall = pd.read_csv('../data/sample_solution.csv')
-    test_result_exist = pd.DataFrame()
-    test_result_exist['Id'] = processed_test.index
-    test_result_exist['Expected'] = prediction
-
-    test_result = pd.DataFrame()
-    test_result['Id'] = unique_ID
-    test_result = pd.merge(test_result, test_result_exist, how='left', on=['Id'], sort=True)
-    test_result.loc[test_result['Expected'].isnull(), 'Expected'] = 0
-    test_result.loc[test_result['Expected'].notnull(), 'Expected'] = test_result.loc[test_result['Expected'].notnull(), 'Expected']
 
     test_result.to_csv(out_file, index=False)
 
@@ -178,10 +165,12 @@ def main():
     tmp_predict = best_valid_model.predict(xgmat_test)
     xgb_predict = np.exp(tmp_predict)-1
 
+    # print(len(xgb_predict))
+    # print(len(unique_ID))
+
     print('Writing the submission file')
-    out_file = '../data/xgb_result_v5.csv'
+    out_file = '../data/xgb_result_v5_pure_allFeatures_2.csv'
     export_submission(unique_ID,xgb_predict,processed_test, out_file)
-    #export_submission_woPalmer(unique_ID,xgb_predict,processed_test, out_file)
 
 
 if __name__ == "__main__":
