@@ -18,7 +18,7 @@ class TargetThresholdFilter(TransformerMixin):
         Modify X and y in-place for training set
         Although y is not returned to comply with sklearn API, subsequent transformers will see a different y
         """
-        indices = np.nonzero(y > self.threshold)[0]
+        indices = X.index[(y > self.threshold).nonzero()[0]]  # since we are dealing DataFrame, the index we get must be the index of DataFrame     
         X.drop(indices, inplace=True)
         y.drop(indices, inplace=True)
         return X
