@@ -38,20 +38,11 @@ class LogPlusOne(TransformerMixin):
         return self
 
     def fit_transform(self, X, y=None, **fit_params):
-        y.loc[:] = np.log10(1+y)
+        y.loc[:] = np.log10(1+y[:])
         return X
 
     def transform(self, X):
         return X
-
-    def metric(self, ground_truth, predictions):
-        return np.float64(
-            np.mean(
-                np.abs(
-                    ground_truth - (np.power(10, predictions) - 1)
-                )
-            )
-        )
 
 
 
