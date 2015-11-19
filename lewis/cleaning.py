@@ -2,6 +2,7 @@ from sklearn.base import TransformerMixin
 import numpy as np
 import pandas as pd
 
+
 class TargetThresholdFilter(TransformerMixin):
     def __init__(self, threshold=None):
         self.threshold = threshold
@@ -27,4 +28,30 @@ class TargetThresholdFilter(TransformerMixin):
         Dummy function do nothing
         """
         return X
+
+
+class LogPlusOne(TransformerMixin):
+    def __init__(self):
+        pass
+
+    def fit(self):
+        return self
+
+    def fit_transform(self, X, y=None, **fit_params):
+        y.loc[:] = np.log10(1+y)
+        return X
+
+    def transform(self, X):
+        return X
+
+    def metric(self, ground_truth, predictions):
+        return np.float64(
+            np.mean(
+                np.abs(
+                    ground_truth - (np.power(10, predictions) - 1)
+                )
+            )
+        )
+
+
 
