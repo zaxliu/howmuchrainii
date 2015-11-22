@@ -1,9 +1,9 @@
-from sklearn.base import TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin
 import numpy as np
 import pandas as pd
 
 
-class TargetThresholdFilter(TransformerMixin):
+class TargetThresholdFilter(BaseEstimator, TransformerMixin):
     def __init__(self, threshold=None):
         self.threshold = threshold
 
@@ -30,7 +30,7 @@ class TargetThresholdFilter(TransformerMixin):
         return X
 
 
-class LogPlusOne(TransformerMixin):
+class LogPlusOne(BaseEstimator,TransformerMixin):
     def __init__(self):
         pass
 
