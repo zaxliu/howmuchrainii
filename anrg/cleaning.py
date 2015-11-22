@@ -38,7 +38,7 @@ class LogPlusOne(BaseEstimator,TransformerMixin):
         return self
 
     def fit_transform(self, X, y=None, **fit_params):
-        y.loc[:] = np.log10(1+y[:])
+        y.loc[:] = np.log10(1+y.loc[:])
         return X
 
     def transform(self, X):
