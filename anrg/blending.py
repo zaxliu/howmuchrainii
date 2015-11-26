@@ -117,7 +117,6 @@ class BlendedRegressor(BaseEstimator, RegressorMixin):
         for i, bm in enumerate(self.base_models):
             X_blending[:, i] = bm.predict(X_base_blending)
         self.blending_model.fit(X_blending, y_blending)
-        # print self.blending_model.coef_, self.blending_model.intercept_
         return self  # return-self convention
 
     def predict(self, X):
