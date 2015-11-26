@@ -132,10 +132,6 @@ class BlendedRegressor(BaseEstimator, RegressorMixin):
             X_blending[:, i] = bm.predict(X)
         return self.blending_model.predict(X_blending)
 
-    def transform(self):
-        # for pipeline
-        pass
+    def fit_predict(self, X, y=None, **fit_params):
+        return self.fit(X, y).predict(X)
 
-    def fit_transform(self, X, y=None):
-        # for pipeline
-        pass
