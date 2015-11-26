@@ -17,13 +17,11 @@ from scipy import sparse
 
 # Changed relative addressing to absolute addressing
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.externals.joblib import Parallel, delayed
 from sklearn.externals import six
 from sklearn.utils import tosequence
 from sklearn.utils.metaestimators import if_delegate_has_method
-from sklearn.externals.six import iteritems
 
-__all__ = ['Pipeline', 'FeatureUnion']
+__all__ = ['Pipeline']
 
 
 class Pipeline(BaseEstimator):
@@ -55,34 +53,7 @@ class Pipeline(BaseEstimator):
         Keys are step names and values are steps parameters.
 
     Examples
-    --------
-    >>> from sklearn import svm
-    >>> from sklearn.datasets import samples_generator
-    >>> from sklearn.feature_selection import SelectKBest
-    >>> from sklearn.feature_selection import f_regression
-    >>> from sklearn.pipeline import Pipeline
-    >>> # generate some data to play with
-    >>> X, y = samples_generator.make_classification(
-    ...     n_informative=5, n_redundant=0, random_state=42)
-    >>> # ANOVA SVM-C
-    >>> anova_filter = SelectKBest(f_regression, k=5)
-    >>> clf = svm.SVC(kernel='linear')
-    >>> anova_svm = Pipeline([('anova', anova_filter), ('svc', clf)])
-    >>> # You can set the parameters using the names issued
-    >>> # For instance, fit using a k of 10 in the SelectKBest
-    >>> # and a parameter 'C' of the svm
-    >>> anova_svm.set_params(anova__k=10, svc__C=.1).fit(X, y)
-    ...                                              # doctest: +ELLIPSIS
-    Pipeline(steps=[...])
-    >>> prediction = anova_svm.predict(X)
-    >>> anova_svm.score(X, y)                        # doctest: +ELLIPSIS
-    0.77...
-    >>> # getting the selected features chosen by anova_filter
-    >>> anova_svm.named_steps['anova'].get_support()
-    ... # doctest: +NORMALIZE_WHITESPACE
-    array([ True,  True,  True, False, False,  True, False,  True,  True, True,
-           False, False,  True, False,  True, False, False, False, False,
-           True], dtype=bool)
+    ---------
     """
 
     # BaseEstimator interface
@@ -140,16 +111,16 @@ class Pipeline(BaseEstimator):
         for pname, pval in six.iteritems(fit_params):
             step, param = pname.split('__', 1)
             fit_params_steps[step][param] = pval
-        # deep-copy data when doing pre-transform, then subsequent in-place modifications are transparent
+        # deep-copy data before pre-transform so that subsequent in-place
+        # modifications by transformers are transparent to the caller. i.e. X, y is unchanged
         Xt = X.copy()
         yt = y.copy()
         for name, transform in self.steps[:-1]:
             if hasattr(transform, "fit_transform"):
                 Xt = transform.fit_transform(Xt, yt, **fit_params_steps[name])
             else:
-                Xt = transform.fit(Xt, yt, **fit_params_steps[name]) \
-                              .transform(Xt)
-        # also return yt for .fit later
+                Xt = transform.fit(Xt, yt, **fit_params_steps[name]) .transform(Xt)
+        # also return yt for fitting estimator
         return Xt, yt, fit_params_steps[self.steps[-1][0]]
 
     def fit(self, X, y=None, **fit_params):
@@ -348,231 +319,121 @@ class Pipeline(BaseEstimator):
         return getattr(self.steps[0][1], '_pairwise', False)
 
 
-def _name_estimators(estimators):
-    """Generate names for estimators."""
+class TransformerPipeline(BaseEstimator, TransformerMixin):
+    """(Shared) Pipeline of transforms.
 
-    names = [type(estimator).__name__.lower() for estimator in estimators]
-    namecount = defaultdict(int)
-    for est, name in zip(estimators, names):
-        namecount[name] += 1
+    Sequentially apply a list of transforms. Steps of the pipeline must be 'transforms', that is, they
+    must implement fit and transform methods.
 
-    for k, v in list(six.iteritems(namecount)):
-        if v == 1:
-            del namecount[k]
-
-    for i in reversed(range(len(estimators))):
-        name = names[i]
-        if name in namecount:
-            names[i] += "-%d" % namecount[name]
-            namecount[name] -= 1
-
-    return list(zip(names, estimators))
-
-
-def make_pipeline(*steps):
-    """Construct a Pipeline from the given estimators.
-
-    This is a shorthand for the Pipeline constructor; it does not require, and
-    does not permit, naming the estimators. Instead, they will be given names
-    automatically based on their types.
-
-    Examples
-    --------
-    >>> from sklearn.naive_bayes import GaussianNB
-    >>> from sklearn.preprocessing import StandardScaler
-    >>> make_pipeline(StandardScaler(), GaussianNB())    # doctest: +NORMALIZE_WHITESPACE
-    Pipeline(steps=[('standardscaler',
-                     StandardScaler(copy=True, with_mean=True, with_std=True)),
-                    ('gaussiannb', GaussianNB())])
-
-    Returns
-    -------
-    p : Pipeline
-    """
-    return Pipeline(_name_estimators(steps))
-
-
-def _fit_one_transformer(transformer, X, y):
-    return transformer.fit(X, y)
-
-
-def _transform_one(transformer, name, X, transformer_weights):
-    if transformer_weights is not None and name in transformer_weights:
-        # if we have a weight for this transformer, muliply output
-        return transformer.transform(X) * transformer_weights[name]
-    return transformer.transform(X)
-
-
-def _fit_transform_one(transformer, name, X, y, transformer_weights,
-                       **fit_params):
-    if transformer_weights is not None and name in transformer_weights:
-        # if we have a weight for this transformer, muliply output
-        if hasattr(transformer, 'fit_transform'):
-            X_transformed = transformer.fit_transform(X, y, **fit_params)
-            return X_transformed * transformer_weights[name], transformer
-        else:
-            X_transformed = transformer.fit(X, y, **fit_params).transform(X)
-            return X_transformed * transformer_weights[name], transformer
-    if hasattr(transformer, 'fit_transform'):
-        X_transformed = transformer.fit_transform(X, y, **fit_params)
-        return X_transformed, transformer
-    else:
-        X_transformed = transformer.fit(X, y, **fit_params).transform(X)
-        return X_transformed, transformer
-
-
-class FeatureUnion(BaseEstimator, TransformerMixin):
-    """Concatenates results of multiple transformer objects.
-
-    This estimator applies a list of transformer objects in parallel to the
-    input data, then concatenates the results. This is useful to combine
-    several feature extraction mechanisms into a single transformer.
-
-    Read more in the :ref:`User Guide <feature_union>`.
+    Pipeline may be shared between multiple paths in the execution DAG to save memory and execution time.
+    In such a case, Pipeline will only run fit, fit_transform, and transform every n calls, where
+    n is the number of paths that share this pipeline, and pass-through will apply for the rest
+    of calls
 
     Parameters
     ----------
-    transformer_list: list of (string, transformer) tuples
-        List of transformer objects to be applied to the data. The first
-        half of each tuple is the name of the transformer.
+    steps : list
+        List of (name, transform) tuples (implementing fit/transform) that are
+        chained, in the order in which they are chained.
 
-    n_jobs: int, optional
-        Number of jobs to run in parallel (default 1).
+    num_shares : Integer
+        Number of path that share this pipeline.
 
-    transformer_weights: dict, optional
-        Multiplicative weights for features per transformer.
-        Keys are transformer names, values the weights.
+    Attributes
+    ----------
+    named_steps : dict
+        Read-only attribute to access any step parameter by user given name.
+        Keys are step names and values are steps parameters.
 
+    call_counter : Integer
+        Number of calls to this pipeline. Decides when to re-fit.
     """
-    def __init__(self, transformer_list, n_jobs=1, transformer_weights=None):
-        self.transformer_list = transformer_list
-        self.n_jobs = n_jobs
-        self.transformer_weights = transformer_weights
 
-    def get_feature_names(self):
-        """Get feature names from all transformers.
+    def __init__(self, steps, num_shares=1):
+        names, transforms = zip(*steps)
+        if len(dict(steps)) != len(steps):
+            raise ValueError("Provided step names are not unique: %s" % (names,))
 
-        Returns
-        -------
-        feature_names : list of strings
-            Names of the features produced by transform.
+        # shallow copy of steps
+        self.steps = tosequence(steps)
+        for t in transforms:
+            if (not (hasattr(t, "fit") or hasattr(t, "fit_transform")) or not
+                    hasattr(t, "transform")):
+                raise TypeError("All intermediate steps of the chain should "
+                                "be transforms and implement fit and transform"
+                                " '%s' (type %s) doesn't)" % (t, type(t)))
+        # pipeline states
+        self.num_shares = num_shares
+        self.call_counter = 0
+
+    @property
+    def named_steps(self):
+        return dict(self.steps)
+
+    # Transformer interface
+    def fit(self, X, y=None, **fit_params):
         """
-        feature_names = []
-        for name, trans in self.transformer_list:
-            if not hasattr(trans, 'get_feature_names'):
-                raise AttributeError("Transformer %s does not provide"
-                                     " get_feature_names." % str(name))
-            feature_names.extend([name + "__" + f for f in
-                                  trans.get_feature_names()])
-        return feature_names
-
-    def fit(self, X, y=None):
-        """Fit all transformers using X.
-
-        Parameters
-        ----------
-        X : array-like or sparse matrix, shape (n_samples, n_features)
-            Input data, used to fit transformers.
+        Dummy fit do nothing. fit_transform do all the stuff
         """
-        transformers = Parallel(n_jobs=self.n_jobs)(
-            delayed(_fit_one_transformer)(trans, X, y)
-            for name, trans in self.transformer_list)
-        self._update_transformer_list(transformers)
+        print "Warning: calling the dummy fit in TransformerPipeline"
         return self
 
     def fit_transform(self, X, y=None, **fit_params):
-        """Fit all transformers using X, transform the data and concatenate
-        results.
+        """Fit all the transforms one after the other and transform the
+        data, then use fit_transform on transformed data using the final
+        estimator.
 
         Parameters
         ----------
-        X : array-like or sparse matrix, shape (n_samples, n_features)
-            Input data to be transformed.
+        X : iterable
+            Training data. Must fulfill input requirements of first step of the
+            pipeline.
 
-        Returns
-        -------
-        X_t : array-like or sparse matrix, shape (n_samples, sum_n_components)
-            hstack of results of transformers. sum_n_components is the
-            sum of n_components (output dimension) over transformers.
+        y : iterable, default=None
+            Training targets. Must fulfill label requirements for all steps of
+            the pipeline.
         """
-        result = Parallel(n_jobs=self.n_jobs)(
-            delayed(_fit_transform_one)(trans, name, X, y,
-                                        self.transformer_weights, **fit_params)
-            for name, trans in self.transformer_list)
-
-        Xs, transformers = zip(*result)
-        self._update_transformer_list(transformers)
-        if any(sparse.issparse(f) for f in Xs):
-            Xs = sparse.hstack(Xs).tocsr()
-        else:
-            Xs = np.hstack(Xs)
-        return Xs
+        if self.call_counter == 0:
+            fit_params_steps = dict((step, {}) for step, _ in self.steps)
+            for pname, pval in six.iteritems(fit_params):
+                step, param = pname.split('__', 1)
+                fit_params_steps[step][param] = pval
+            # we want to allow tranformers to modify X and y in-place, so the following operations
+            # are directly applied to X and y in-place
+            for name, transform in self.steps:
+                if hasattr(transform, "fit_transform"):
+                    X = transform.fit_transform(X, y, **fit_params_steps[name])
+                else:
+                    X = transform.fit(X, y, **fit_params_steps[name]) .transform(X)
+        self.call_counter = (self.call_counter+1) % self.num_shares
+        return X
 
     def transform(self, X):
-        """Transform X separately by each transformer, concatenate results.
+        """Applies transforms to the data, and the transform method of the
+        final estimator. Valid only if the final estimator implements
+        transform.
 
         Parameters
         ----------
-        X : array-like or sparse matrix, shape (n_samples, n_features)
-            Input data to be transformed.
-
-        Returns
-        -------
-        X_t : array-like or sparse matrix, shape (n_samples, sum_n_components)
-            hstack of results of transformers. sum_n_components is the
-            sum of n_components (output dimension) over transformers.
+        X : iterable
+            Data to predict on. Must fulfill input requirements of first step of
+            the pipeline.
         """
-        Xs = Parallel(n_jobs=self.n_jobs)(
-            delayed(_transform_one)(trans, name, X, self.transformer_weights)
-            for name, trans in self.transformer_list)
-        if any(sparse.issparse(f) for f in Xs):
-            Xs = sparse.hstack(Xs).tocsr()
-        else:
-            Xs = np.hstack(Xs)
-        return Xs
+        Xt = X
+        for name, transform in self.steps:
+            Xt = transform.transform(Xt)
+        return Xt
 
-    def get_params(self, deep=True):
-        if not deep:
-            return super(FeatureUnion, self).get_params(deep=False)
-        else:
-            out = dict(self.transformer_list)
-            for name, trans in self.transformer_list:
-                for key, value in iteritems(trans.get_params(deep=True)):
-                    out['%s__%s' % (name, key)] = value
-            out.update(super(FeatureUnion, self).get_params(deep=False))
-            return out
+    def inverse_transform(self, X):
+        """Applies inverse transform to the data.
+        Starts with the last step of the pipeline and applies ``inverse_transform`` in
+        inverse order of the pipeline steps.
+        Valid only if all steps of the pipeline implement inverse_transform.
 
-    def _update_transformer_list(self, transformers):
-        self.transformer_list[:] = [
-            (name, new)
-            for ((name, old), new) in zip(self.transformer_list, transformers)
-        ]
-
-
-# XXX it would be nice to have a keyword-only n_jobs argument to this function,
-# but that's not allowed in Python 2.x.
-def make_union(*transformers):
-    """Construct a FeatureUnion from the given transformers.
-
-    This is a shorthand for the FeatureUnion constructor; it does not require,
-    and does not permit, naming the transformers. Instead, they will be given
-    names automatically based on their types. It also does not allow weighting.
-
-    Examples
-    --------
-    >>> from sklearn.decomposition import PCA, TruncatedSVD
-    >>> make_union(PCA(), TruncatedSVD())    # doctest: +NORMALIZE_WHITESPACE
-    FeatureUnion(n_jobs=1,
-                 transformer_list=[('pca', PCA(copy=True, n_components=None,
-                                               whiten=False)),
-                                   ('truncatedsvd',
-                                    TruncatedSVD(algorithm='randomized',
-                                                 n_components=2, n_iter=5,
-                                                 random_state=None, tol=0.0))],
-                 transformer_weights=None)
-
-    Returns
-    -------
-    f : FeatureUnion
-    """
-    return FeatureUnion(_name_estimators(transformers))
+        Parameters
+        ----------
+        X : iterable
+            Data to inverse transform. Must fulfill output requirements of the
+            last step of the pipeline.
+        """
+        raise NotImplementedError
