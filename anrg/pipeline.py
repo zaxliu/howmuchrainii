@@ -16,7 +16,7 @@ import numpy as np
 from scipy import sparse
 
 # Changed relative addressing to absolute addressing
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin
 from sklearn.externals import six
 from sklearn.utils import tosequence
 from sklearn.utils.metaestimators import if_delegate_has_method
@@ -58,7 +58,7 @@ class Pipeline(BaseEstimator):
 
     # BaseEstimator interface
 
-    def __init__(self, steps):
+    def __init__(self, steps, copy=True):
         names, estimators = zip(*steps)
         if len(dict(steps)) != len(steps):
             raise ValueError("Provided step names are not unique: %s" % (names,))
@@ -79,6 +79,7 @@ class Pipeline(BaseEstimator):
             raise TypeError("Last step of chain should implement fit "
                             "'%s' (type %s) doesn't)"
                             % (estimator, type(estimator)))
+        self.copy = copy
 
     @property
     def _estimator_type(self):
@@ -111,10 +112,14 @@ class Pipeline(BaseEstimator):
         for pname, pval in six.iteritems(fit_params):
             step, param = pname.split('__', 1)
             fit_params_steps[step][param] = pval
-        # deep-copy data before pre-transform so that subsequent in-place
-        # modifications by transformers are transparent to the caller. i.e. X, y is unchanged
-        Xt = X.copy()
-        yt = y.copy()
+        if self.copy:
+            # deep-copy data before pre-transform so that subsequent in-place
+            # modifications by transformers are transparent to the caller. i.e. X, y is unchanged
+            Xt = X.copy()
+            yt = y.copy()
+        else:
+            Xt = X
+            yt = y
         for name, transform in self.steps[:-1]:
             if hasattr(transform, "fit_transform"):
                 Xt = transform.fit_transform(Xt, yt, **fit_params_steps[name])
@@ -317,3 +322,57 @@ class Pipeline(BaseEstimator):
     def _pairwise(self):
         # check if first estimator expects pairwise input
         return getattr(self.steps[0][1], '_pairwise', False)
+
+
+class LeaveTailK(BaseEstimator, TransformerMixin):
+    def __init__(self, K=0):
+        if K < 0:
+            print "K should be >0"
+            raise ValueError
+        self.K = K
+
+    def fit(self):
+        pass
+
+    def fit_transform(self, X, y=None, **fit_params):
+        return self.transform(X, y)
+
+    def transform(self, X, y=None):
+        if self.K >= X.shape[1]:
+            print "K should be smaller than the # of features."
+            raise ValueError
+        return X[:, :-self.K]
+
+
+class SelectTailK(BaseEstimator, TransformerMixin):
+    def __init__(self, K=1):
+        if K <= 0:
+            print "K should be >= 0"
+            raise ValueError
+        self.K = K
+
+    def fit(self):
+        pass
+
+    def fit_transform(self, X, y=None, **fit_params):
+        return self.transform(X, y)
+
+    def transform(self, X, y=None):
+        if self.K >= X.shape[1]:
+            print "K should be no-greater than the # of features."
+            raise ValueError
+        return X[:, -self.K:]
+
+
+class DummyRegressor(BaseEstimator, RegressorMixin):
+    def __init__(self):
+        pass
+
+    def fit(self, X, y=None):
+        return self
+
+    def predict(self, X):
+        return X[:, -1]
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X, y).predict(X)
