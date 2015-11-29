@@ -63,43 +63,41 @@ def check_cv(cv, X=None, y=None, classifier=False):
             cv = ShuffleSplit(n=n_samples, test_size=cv, random_state=12345)
     return cv
 
-class KDPZDRRegressor(BaseEstimator, RegressorMixin):
+class REFZDRRegressor(BaseEstimator, RegressorMixin):
     """KDPZDR: a meta-regressor
 
     
 
     Parameters
     ----------
-    kdpzdr_aa = 136
-    kdpzdr_bb = 0.968
-    kdpzdr_cc = -2.86
+    refzdr_aa = 0.00746
+    refzdr_bb = 0.945
+    refzdr_cc = -4.76
    
     Attributes
     ----------
-    kdpzdr_aa_scaling:
-    kdpzdr_bb_scaling:
-    kdpzdr_bb_scaling:
+    refzdr_aa_scaling:
+    refzdr_bb_scaling:
+    refzdr_bb_scaling:
     
     """
-    def __init__(self, kdpzdr_aa_scaling=1,kdpzdr_bb_scaling=1,kdpzdr_cc_scaling=1):
-        self.kdpzdr_aa_scaling = kdpzdr_aa_scaling
-        self.kdpzdr_bb_scaling = kdpzdr_bb_scaling
-        self.kdpzdr_cc_scaling = kdpzdr_cc_scaling
+    def __init__(self, refzdr_aa_scaling=1,refzdr_bb_scaling=1,refzdr_cc_scaling=1):
+        self.refzdr_aa_scaling = refzdr_aa_scaling
+        self.refzdr_bb_scaling = refzdr_bb_scaling
+        self.refzdr_cc_scaling = refzdr_cc_scaling
 
     def fit(self, X, y=None):
         return self  # return-self convention
 
     def predict(self, X):
-        kdpzdr_aa = 13.6
-        kdpzdr_bb = 0.0968
-        kdpzdr_cc = -0.286
+        refzdr_aa = 0.00746
+        refzdr_bb = 0.945
+        refzdr_cc = -4.76
 
         
-        #RATE_KDP_ZDR =
-        #sign(KDP) * kdpzdr_aa * (|KDP| ** kdpzdr_bb) *(ZDR  ** kdpzdr_cc) #Note: ZDR need to be convert from DB to num
+        mmperhr = (refzdr_aa*self.refzdr_aa_scaling)*pow(pow(10,X['Ref_mean']/10),refzdr_bb*self.refzdr_bb_scaling)*pow(pow(10,X['Zdr_mean']/10),refzdr_cc*self.refzdr_cc_scaling)
         
-        mmperhr = np.sign(X['Kdp_mean'])*(kdpzdr_aa*self.kdpzdr_aa_scaling)*pow(np.abs(X['Kdp_mean']),kdpzdr_bb*self.kdpzdr_bb_scaling)*pow(pow(10,X['Zdr_mean']/10),kdpzdr_cc*self.kdpzdr_cc_scaling)
-    
+        
         mmperhr[mmperhr <= 0]=0
         
         return mmperhr 

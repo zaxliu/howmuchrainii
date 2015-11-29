@@ -1,3 +1,5 @@
+__author__ = 'Quynh Nguyen'
+
 import numbers
 import numpy as np
 import scipy.sparse as sp
@@ -5,6 +7,10 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.cross_validation import _safe_split, KFold, StratifiedKFold, ShuffleSplit
 from sklearn.utils.multiclass import type_of_target
 from sklearn.utils.validation import _num_samples
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.cluster import MiniBatchKMeans
+from sklearn import metrics
 
 
 def check_cv(cv, X=None, y=None, classifier=False):
@@ -63,46 +69,39 @@ def check_cv(cv, X=None, y=None, classifier=False):
             cv = ShuffleSplit(n=n_samples, test_size=cv, random_state=12345)
     return cv
 
-class KDPZDRRegressor(BaseEstimator, RegressorMixin):
-    """KDPZDR: a meta-regressor
 
-    
-
-    Parameters
-    ----------
-    kdpzdr_aa = 136
-    kdpzdr_bb = 0.968
-    kdpzdr_cc = -2.86
-   
-    Attributes
-    ----------
-    kdpzdr_aa_scaling:
-    kdpzdr_bb_scaling:
-    kdpzdr_bb_scaling:
-    
+class ClusteringFilterBatch(BaseEstimator, RegressorMixin):
+    """Clustering: a meta-regressor
     """
-    def __init__(self, kdpzdr_aa_scaling=1,kdpzdr_bb_scaling=1,kdpzdr_cc_scaling=1):
-        self.kdpzdr_aa_scaling = kdpzdr_aa_scaling
-        self.kdpzdr_bb_scaling = kdpzdr_bb_scaling
-        self.kdpzdr_cc_scaling = kdpzdr_cc_scaling
+    def __init__(self, max_clusters=None):
+        self.max_clusters = max_clusters
 
     def fit(self, X, y=None):
         return self  # return-self convention
 
     def predict(self, X):
-        kdpzdr_aa = 13.6
-        kdpzdr_bb = 0.0968
-        kdpzdr_cc = -0.286
 
-        
-        #RATE_KDP_ZDR =
-        #sign(KDP) * kdpzdr_aa * (|KDP| ** kdpzdr_bb) *(ZDR  ** kdpzdr_cc) #Note: ZDR need to be convert from DB to num
-        
-        mmperhr = np.sign(X['Kdp_mean'])*(kdpzdr_aa*self.kdpzdr_aa_scaling)*pow(np.abs(X['Kdp_mean']),kdpzdr_bb*self.kdpzdr_bb_scaling)*pow(pow(10,X['Zdr_mean']/10),kdpzdr_cc*self.kdpzdr_cc_scaling)
-    
-        mmperhr[mmperhr <= 0]=0
-        
-        return mmperhr 
+        silhouette_avg = []
+        batch_size = 100
+        for num_clusters in (2,self.max_clusters,1):
+            print('hoho')
+            estimator = MiniBatchKMeans(init='k-means++', n_clusters=num_clusters, n_init=10, batch_size=batch_size)
+            cluster_labels = estimator.fit_predict(X)
+            print('hoho1')
+            print(type(X))
+            print(type(X.values))
+            print(len(X.values))
+            print(num_clusters-2)
+            temp_score  = metrics.silhouette_score(X.values, estimator.labels_,metric='euclidean',sample_size=1000)
+            print('hoho2')
+            print(temp_score)
+            silhouette_avg.append(temp_score)
+            print(silhouette_avg)
+            silhouette_avg[num_clusters-2]= metrics.silhouette_score(X.values, estimator.labels_,metric='euclidean',sample_size=1000)
+            #silhouette_avg[num_clusters-2] = silhouette_score(X, cluster_labels)
+            print("For n_clusters =", num_clusters,"The average silhouette_score is :", silhouette_avg[num_clusters-2])
+
+        return silhouette_avg
 
     def transform(self):
         # for pipeline
