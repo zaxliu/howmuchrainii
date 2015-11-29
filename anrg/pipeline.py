@@ -341,6 +341,7 @@ class LeaveTailK(BaseEstimator, TransformerMixin):
         if self.K >= X.shape[1]:
             print "K should be smaller than the # of features."
             raise ValueError
+        # print X[:, :-self.K].shape
         return X[:, :-self.K]
 
 
@@ -361,7 +362,28 @@ class SelectTailK(BaseEstimator, TransformerMixin):
         if self.K >= X.shape[1]:
             print "K should be no-greater than the # of features."
             raise ValueError
+        # print X[:, -self.K:].shape
         return X[:, -self.K:]
+    
+class SelectK2Last(BaseEstimator, TransformerMixin):
+    def __init__(self, K=1):
+        if K <= 0:
+            print "K should be >= 0"
+            raise ValueError
+        self.K = K
+
+    def fit(self):
+        pass
+
+    def fit_transform(self, X, y=None, **fit_params):
+        return self.transform(X, y)
+
+    def transform(self, X, y=None):
+        if self.K >= X.shape[1]:
+            print "K should be no-greater than the # of features."
+            raise ValueError
+        # print X[:, -self.K].shape
+        return X[:, -self.K]
 
 
 class DummyRegressor(BaseEstimator, RegressorMixin):
@@ -372,7 +394,13 @@ class DummyRegressor(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X):
-        return X[:, -1]
+        if len(X.shape)==1:
+            return X
+        elif len(X.shape)==2:
+            return X[:, -1]
+        else:
+            print "Dimension not right!"
+            raise ValueError
 
     def fit_predict(self, X, y=None):
         return self.fit(X, y).predict(X)
