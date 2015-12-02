@@ -83,23 +83,13 @@ class ClusteringFilterBatch(BaseEstimator, RegressorMixin):
 
         silhouette_avg = []
         batch_size = 100
-        for num_clusters in (2,self.max_clusters,1):
-            print('hoho')
+        for num_clusters in range(2,self.max_clusters,1):
             estimator = MiniBatchKMeans(init='k-means++', n_clusters=num_clusters, n_init=10, batch_size=batch_size)
             cluster_labels = estimator.fit_predict(X)
-            print('hoho1')
-            print(type(X))
-            print(type(X.values))
-            print(len(X.values))
-            print(num_clusters-2)
-            temp_score  = metrics.silhouette_score(X.values, estimator.labels_,metric='euclidean',sample_size=1000)
-            print('hoho2')
-            print(temp_score)
+            #temp_score = silhouette_score(X, cluster_labels)
+            temp_score  = metrics.silhouette_score(X.values, estimator.labels_,metric='euclidean',sample_size=10000)
             silhouette_avg.append(temp_score)
-            print(silhouette_avg)
-            silhouette_avg[num_clusters-2]= metrics.silhouette_score(X.values, estimator.labels_,metric='euclidean',sample_size=1000)
-            #silhouette_avg[num_clusters-2] = silhouette_score(X, cluster_labels)
-            print("For n_clusters =", num_clusters,"The average silhouette_score is :", silhouette_avg[num_clusters-2])
+            print("For n_clusters =", num_clusters,"The average silhouette_score is :", temp_score)
 
         return silhouette_avg
 
