@@ -28,7 +28,7 @@ class ClassifiedRegressor(BaseEstimator, RegressorMixin):
     """
     def __init__(self, labeling_thresh=None,
                  classifier=None, proba_thresh=None,
-                 regressors=(LinearRegression(), )):
+                 regressors=(LinearRegression(), ), verbose=0):
         if labeling_thresh is None or classifier is None or proba_thresh is None:
             if not labeling_thresh is None or not classifier is None or not proba_thresh is None:
                 print "labeling_metric, classifier, proba_to_label should be None simultaneously!"
@@ -42,26 +42,34 @@ class ClassifiedRegressor(BaseEstimator, RegressorMixin):
             self.classifier = classifier
             self.proba_thresh = proba_thresh
         self.regressors = regressors
+        self.verbose = verbose
 
     def fit(self, X, y=None):
         # step 1: (X, y) -> (X, label)
-        print "Getting labels..."
-        labels = y > self.labeling_thresh
+        # print "Getting labels..."
+        labels = y.values > self.labeling_thresh
         # step 2: (X, label) train classifier
         # print "Training classifier..."
         self.classifier.fit(X, labels)
         # step 3: (X[label=i], y[label=i]) train regressors
         # print "Training regressors...",
         label_set = np.unique(labels)  # get the set of unique labels, in ascending sorted order
+        self.label_set = label_set
         # Sanity check
         if len(label_set) != len(self.regressors):
             print "Number of labels != number of regressors!"
             raise ValueError
+        if self.verbose > 0:
+            print y.shape[0],
         for i, label in enumerate(label_set):
-            # print " {}...".format(i),
+            # print " {}...".format(i),            
             index = (labels == label)
-            self.regressors[i].fit(X[index, :], y[index])
-        # print " "
+            if self.verbose > 0:
+                print np.sum(index),
+            # print type(labels)
+            self.regressors[i].fit(X[index, :], y.values[index])  # y is passed in as pd.Series, if not changed should use number indexing
+        if self.verbose > 0:
+            print " "
         return self
 
     def predict(self, X):
@@ -70,11 +78,18 @@ class ClassifiedRegressor(BaseEstimator, RegressorMixin):
         # Step 2: proba -> label
         labels = probs[:, 0] < self.proba_thresh
         # Step 3: X[label=i] -> regressor prediction
-        label_set = np.unique(labels)
         y = np.zeros([X.shape[0], ])
-        for i, label in enumerate(label_set):
+        if self.verbose > 0:
+            print y.shape[0],
+        for i, label in enumerate(self.label_set):
             index = (labels == label)
+            if self.verbose > 0:
+                print np.sum(index),
+            if np.sum(index) == 0:
+                continue
             y[index] = self.regressors[i].predict(X[index, :])
+        if self.verbose > 0:
+            print " "
         return y
 
     def fit_predict(self, X, y=None):
