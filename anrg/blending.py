@@ -8,7 +8,7 @@ from sklearn.utils.multiclass import type_of_target
 from sklearn.utils.validation import _num_samples
 
 
-def check_cv(cv, X=None, y=None, classifier=False):
+def check_cv(cv, X=None, y=None, classifier=False, random_state=None):
     """Input checker utility for building a CV in a user friendly way.
     Parameters
     ----------
@@ -61,7 +61,7 @@ def check_cv(cv, X=None, y=None, classifier=False):
                 n_samples = len(X)
             else:
                 n_samples = X.shape[0]
-            cv = ShuffleSplit(n=n_samples, test_size=cv, random_state=12345)
+            cv = ShuffleSplit(n=n_samples, test_size=cv, random_state=random_state)
     return cv
 
 class BlendedRegressor(BaseEstimator, RegressorMixin):
@@ -89,14 +89,15 @@ class BlendedRegressor(BaseEstimator, RegressorMixin):
     with_feature:
     """
     def __init__(self, base_models=(LinearRegression(),), blending_model=LinearRegression(),
-                 blending_split=None, with_feature=False):
+                 blending_split=None, random_state=None, with_feature=False):
         self.base_models = base_models
         self.blending_model = blending_model
         self.blending_split = blending_split
+        self.random_state = random_state
         self.with_feature = with_feature
 
     def fit(self, X, y=None):
-        blending_split = check_cv(self.blending_split, X, y)  # return a cv iterator
+        blending_split = check_cv(cv=self.blending_split, X=X, y=y, classifier=False, random_state=self.random_state)  # return a cv iterator
         base_index, blending_index = blending_split.__iter__().next()  # take first split
         # fit base_models on X_base_trn and y_base_trn
         # print "Fitting base models..."
