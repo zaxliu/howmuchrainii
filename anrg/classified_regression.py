@@ -46,27 +46,28 @@ class ClassifiedRegressor(BaseEstimator, RegressorMixin):
 
     def fit(self, X, y=None):
         # step 1: (X, y) -> (X, label)
-        # print "Getting labels..."
-        labels = y.values > self.labeling_thresh
-        # step 2: (X, label) train classifier
-        # print "Training classifier..."
-        self.classifier.fit(X, labels)
-        # step 3: (X[label=i], y[label=i]) train regressors
-        # print "Training regressors...",
+        labels = y.values > self.labeling_thresh  # outliers = True
         label_set = np.unique(labels)  # get the set of unique labels, in ascending sorted order
-        self.label_set = label_set
-        # Sanity check
-        if len(label_set) != len(self.regressors):
+        self.label_set = label_set        
+        if len(label_set) != len(self.regressors):  # Sanity check
             print "Number of labels != number of regressors!"
             raise ValueError
+            
+        # step 2: (X, label) train classifier
         if self.verbose > 0:
-            print y.shape[0],
-        for i, label in enumerate(label_set):
-            # print " {}...".format(i),            
+            print "Training classifier, total samples = {}...",
+            for label in label_set:
+                print "label {} subtotal {}...".format(label, np.sum(labels==label)),
+        self.classifier.fit(X, labels)
+        
+        
+        # step 3: (X[label=i], y[label=i]) train regressors
+        if self.verbose > 0:
+            print "fitting regressors, total samples = {}...".format(y.shape[0]),
+        for i, label in enumerate(label_set):           
             index = (labels == label)
             if self.verbose > 0:
-                print np.sum(index),
-            # print type(labels)
+                print "regressor {} fits label {} subtotal {}...".format(i, label, np.sum(index)),
             self.regressors[i].fit(X[index, :], y.values[index])  # y is passed in as pd.Series, if not changed should use number indexing
         if self.verbose > 0:
             print " "
@@ -75,16 +76,18 @@ class ClassifiedRegressor(BaseEstimator, RegressorMixin):
     def predict(self, X):
         # Step 1: X -> proba
         probs = self.classifier.predict_proba(X)
+        
         # Step 2: proba -> label
         labels = probs[:, 0] < self.proba_thresh
+        
         # Step 3: X[label=i] -> regressor prediction
         y = np.zeros([X.shape[0], ])
         if self.verbose > 0:
-            print y.shape[0],
+            print "Regressor prediction, total samples = {}...".format(y.shape[0]),
         for i, label in enumerate(self.label_set):
             index = (labels == label)
             if self.verbose > 0:
-                print np.sum(index),
+                print "regressor {} predicts label {} subtotal {}...".format(i, label, np.sum(index)),
             if np.sum(index) == 0:
                 continue
             y[index] = self.regressors[i].predict(X[index, :])
