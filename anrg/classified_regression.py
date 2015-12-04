@@ -55,7 +55,7 @@ class ClassifiedRegressor(BaseEstimator, RegressorMixin):
             
         # step 2: (X, label) train classifier
         if self.verbose > 0:
-            print "Training classifier, total samples = {}...",
+            print "Training classifier, total samples = {}...".format(y.shape[0]),
             for label in label_set:
                 print "label {} subtotal {}...".format(label, np.sum(labels==label)),
         self.classifier.fit(X, labels)
